@@ -1,133 +1,225 @@
-# 轨迹离散化与控制优化相关论文调研
+# Action Tokenizer 与 Latent Action 研究调研
 
-**检索范围：**以 2023–2026 年 arXiv 论文为主，重点关注 B-spline、傅里叶/DCT 等低维基函数或频域表示如何将连续轨迹/动作转成可优化、可控制或可预测的有限维变量。严格按今天（2026-10-17）往前三年计算，2023 年 10 月前的工作略早于窗口；仍保留少数 2023 年代表性工作作为邻近参考。下面按与你的“语言—时间—动作”离散表示研究的相关性分组。
+**范围与筛选：**聚焦近年机器人/VLA 中的离散动作 tokenizer、视频 latent action、跨 embodiment 动作码，以及直接参数化连续动作的样条表示。移出与动作表示关系较弱的通用轨迹优化、赛车路径规划、遍历搜索和加工轨迹等背景工作。以下论文主要为 2023–2026 年 arXiv 预印本；论文简介概括其表示设计与主要目标。
 
-## 一、与语言条件动作离散化最直接相关
+## 一、机器人动作序列的离散 tokenizer
 
-### 1. FAST: Efficient Action Tokenization for Vision-Language-Action Models
+这一类以已有机器人动作序列为输入，学习离散 code/token，再由策略预测 token 并解码为连续控制。主要研究问题从压缩和重构，逐渐扩展到语义对齐、策略可预测性、物理关系保持和状态条件解码。
+
+
+### FAST: Efficient Action Tokenization for Vision-Language-Action Models
 
 **arXiv：** https://arxiv.org/abs/2501.09747
 
 **简介核心工作：**提出 Frequency-space Action Sequence Tokenization（FAST），对机器人连续动作块做离散余弦变换（DCT），再对频域系数压缩/离散化，替代逐时间步、逐维度的直接分箱。方法利用动作序列的时间平滑性，减少高频动作建模所需 token 数，使自回归 VLA 能学习灵巧、高频控制；论文还发布在百万条真实动作轨迹上训练的 FAST+ 通用 tokenizer，并展示与 pi0 等策略结合后的扩展能力。对你的研究最直接的启发是：token 对应的是整段动作的频率结构，而不是孤立的时刻值；需关注截断系数、量化误差、反变换后的控制可执行性，以及语言监督如何进入 token 学习目标。
 
-### 2. BEAST: Efficient Tokenization of B-Splines Encoded Action Sequences for Imitation Learning
+### BEAST: Efficient Tokenization of B-Splines Encoded Action Sequences for Imitation Learning
 
 **arXiv：** https://arxiv.org/abs/2506.06072
 
 **简介核心工作：**提出 B-spline Encoded Action Sequence Tokenizer（BEAST），先用 B-spline 表示连续动作序列，再将样条参数编码为固定长度的离散或连续 token。与需要单独训练码本的 VQ/BPE tokenizer 不同，BEAST 利用样条系数直接产生统一长度的表示；解码后得到连续、平滑的控制信号。作者将表示接入 VAE、decoder-only Transformer 和 Florence-2 视觉语言模型，并在仿真与真实机器人任务中评估。它与“轨迹参数→token→连续动作控制”的研究问题高度重合，可重点比较其基函数系数是否保留动作语义、时间尺度和跨任务共享结构。
 
-## 二、经典轨迹优化与控制中的 B-spline 参数化
+### VQ-VLA: Improving Vision-Language-Action Models via Scaling Vector-Quantized Action Tokenizers
 
-### 3. An Optimization-Based Planner with B-spline Parameterized Continuous-Time Reference Signals
+**arXiv：** https://arxiv.org/abs/2507.01016
 
-**arXiv：** https://arxiv.org/abs/2404.00133
+**简介核心工作：**提出基于卷积 residual VQ-VAE 的机器人动作 tokenizer，并研究扩大 tokenizer 训练数据规模的效果。工作利用大规模真实与合成轨迹数据学习时空动态 codebook，报告更平滑连贯的动作输出、较快推理，以及在短时反应和长时规划任务上的迁移表现。作者指出合成轨迹与真实轨迹的差距相对有限，可用于扩展 tokenizer 数据。它与 FAST/BEAST 同属有动作标签序列的离散化路线，主要差别是学习式向量量化和数据规模扩展。
 
-**简介核心工作：**提出 BSPOP，以 B-spline 控制点参数化连续时间控制输入，针对规划器与低层控制器频率不匹配的问题生成任意采样频率下都可查询的参考信号。通过 B-spline 的凸包性质，可将连续控制输入约束在凸控制集合内；相较逐时刻离散优化，减少决策变量和不等式约束。仿真和实验结果显示，在较低计算开销下可达到高频基线相近的规划表现。这篇适合参考“参数数量—采样频率解耦—可行性约束”的方法设计。
+### Action Tokenizer Matters in In-Context Imitation Learning
 
-### 4. PE-Planner: A Performance-Enhanced Quadrotor Motion Planner for Autonomous Flight in Complex and Dynamic Environments
+**arXiv：** https://arxiv.org/abs/2503.01206
 
-**arXiv：** https://arxiv.org/abs/2403.12865
+**简介核心工作：**系统比较多种动作 tokenizer 在 in-context imitation learning（ICIL）中的效果，发现重构准确并不保证解码动作足够平滑。作者提出 LipVQ-VAE，通过权重归一化在 latent action 空间施加 Lipschitz 约束，使相近输入对应更平滑的潜变量/解码轨迹，并报告模拟与真实机器人实验中的稳定性收益。启示是把时间平滑、局部连续性和闭环可执行性纳入 tokenizer 质量指标，而不只报告离线重构误差。
 
-**简介核心工作：**面向复杂、动态和未知干扰环境中的高速四旋翼飞行，先在离散控制空间中做 kinodynamic 搜索，再用 B-spline 轨迹优化提升平滑度与障碍物间隙；局部规划器使用 model predictive contouring control（MPCC），联合考虑动力学、扰动、参考轨迹、控制/时间代价和安全约束生成实时控制。论文报告了仿真及真实飞行实验，包括复杂赛道上超过 6.8 m/s 的飞行。它展示了“低维样条轨迹优化 + 在线反馈控制”的组合范式。
+### ActionPiece: Rethinking Action Tokenization for Autoregressive Vision-Language-Action Models
 
-### 5. Safe and Efficient Trajectory Optimization for Autonomous Vehicles using B-spline with Incremental Path Flattening
+**arXiv：** https://arxiv.org/abs/2609.18487
 
-**arXiv：** https://arxiv.org/abs/2311.02957
+**简介核心工作：**指出逐点重构误差未必能衡量 tokenizer 是否保留不同示范动作之间的物理关系，提出 physical rank consistency（PRC）评价解码动作对局部动作距离排序的保持程度，并以此联合监督表示学习与量化，形成离散 action tokens。工作强调 tokenization 不仅要还原单条轨迹，也应保留动作调整的相对关系，以支持策略在不同情境中选择合适动作。
 
-**简介核心工作：**针对自动驾驶车辆中路径与速度耦合、车辆外形膨胀导致碰撞检测过保守的问题，提出盘形 swept-volume 估计、增量路径展平（IPF）和动力学可行性惩罚。优化变量由 B-spline 表示；通过碰撞点迭代推开轨迹，并逐步调整曲率代价，同时惩罚纵/横向速度和加速度以满足运动学、动力学限制。论文包含仿真和真实车辆实验。适合关注如何把几何轨迹基函数与路径—速度耦合、安全约束共同放进优化。
+### ActionCodec: What Makes for Good Action Tokenizers
 
-### 6. Spline-Based Minimum-Curvature Trajectory Optimization for Autonomous Racing
+**arXiv：** https://arxiv.org/abs/2602.15397
 
-**arXiv：** https://arxiv.org/abs/2309.09186
+**简介核心工作：**从 VLA 优化而非单纯重构角度提出 tokenizer 设计原则，包括提高时间 token overlap、减少词表冗余、增强多模态互信息和 token 独立性，并据此构造 ActionCodec。论文报告在多个仿真和真实任务上的训练效率及策略表现提升，强调 tokenizer 应为下游策略提供易学习的序列目标。
 
-**简介核心工作：**为自动赛车提出仅以 B-spline 控制点为优化变量的最小曲率轨迹优化方法，面向早期开发阶段车辆/赛道动力学数据有限的场景。相较离散轨迹点形式，样条表示提供连续性保证和局部可编辑性；作者报告在相近最优性下将决策变量维度降低约 90%，长赛道计算从秒级降至毫秒级。该工作发布于 2023 年 9 月，略早于严格三年窗口，但对“低维轨迹控制点作为动作表征”很有参考价值。
+### Beyond Reconstruction: What Matters for Action Tokenization for Robot Policies?
 
-## 三、傅里叶表示：控制函数逼近与轨迹目标度量
+**arXiv：** https://arxiv.org/abs/2610.09170
 
-### 7. Time Optimal Ergodic Search
+**简介核心工作：**提出 Predictable and Robust Action Tokenization（ProAct），在动作重构目标之外加入面向下游预测性和鲁棒性的训练设计。论文指出，tokenizer 不仅要重构训练轨迹，还要让策略容易预测正确 token，并确保未见 token 序列解码后仍是合理动作；方法仅用动作数据训练，可适配多种 tokenizer 架构，并在模拟、VLA 和实机评估中报告收益。
 
-**arXiv：** https://arxiv.org/abs/2305.11643
+### SA-VLA: State-aware tokenizer for improving Vision-Language-Action Models' performance
 
-**简介核心工作：**研究机器人搜索中的时间最优遍历轨迹，将搜索覆盖质量写成基于余弦傅里叶谱系数的 ergodic metric，并把该指标的上界作为约束，以优化完成搜索所需时间。论文给出 Pontryagin 最优性条件和直接转录数值解，并在仿真及复杂环境中的无人机实验验证。注意：这里的傅里叶级数主要用于表示/度量空间覆盖分布，不是直接用傅里叶系数参数化整条控制轨迹；对“频谱特征如何进入控制目标”有启发，但与动作 tokenization 有区别。论文发表于 2023 年 5 月，略早于严格三年窗口。
+**arXiv：** https://arxiv.org/abs/2606.30113
 
-### 8. A Multidimensional Fourier Approximation of Optimal Control Surfaces
+**简介核心工作：**提出 state-aware action tokenizer，在离散 token 解码时显式条件化机器人本体状态。作者比较 state-action cross-attention 和轻量 state adapter；后者通过调制因子使一个离散 code 对应一族随状态变化的连续动作，从而缓解固定 code prototype 的压缩误差，并兼容自回归或并行 token 解码。
 
-**arXiv：** https://arxiv.org/abs/2306.16569
+### Behavior-Aligned Action Tokenization for Robot Policy Learning
 
-**简介核心工作：**用多维截断傅里叶级数逼近依赖初始条件与时间的最优控制函数和轨迹曲面，并结合改进的 augmented Lagrangian 将约束最优控制问题转为无约束优化。作者在牛顿力学的二次控制问题和复制子动力学博弈问题上验证方法，并讨论自动微分与傅里叶逼近误差界。它提供了“用少量频域系数表示一族控制解/轨迹曲面”的思路；与机器人单条轨迹控制不同，研究对象是控制/轨迹解的函数曲面。论文发表于 2023 年 6 月，略早于严格三年窗口。
+**arXiv：** https://arxiv.org/abs/2609.27513
 
-## 归纳：对“语言—时间—动作”联合表示的可借鉴点
+**简介核心工作：**提出 BAAT，用 Soft-DTW 在不同示范中寻找对应动作片段，并联合重构与量化坐标对齐，使执行方式相似但时间不同的片段获得相近 token 表示。下游自回归策略预测离散 token，再由 history-conditioned diffusion decoder 还原连续动作；工作强调用行为对应关系监督离散码本，而不只靠逐点重构。
 
-- **表示单元：**FAST 以频域系数压缩动作块；BEAST 以样条控制点表示连续动作；传统优化论文则直接优化样条控制点或谱特征。可以比较 token 是表示局部动作、整段运动形状，还是某个任务条件下的低维控制函数。
-- **时间语义：**固定均匀采样的 DCT token 默认时间网格固定；B-spline 的 knot/control point 机制更容易表达非均匀时间分辨率和局部时间变化。若目标是共同对齐语言、时间和动作，可考虑把 knot/时长也作为显式变量或 token，而非只编码几何系数。
-- **可执行性：**传统规划工作把动力学、障碍物、控制幅值/平滑性约束直接放入优化；动作 tokenizer 工作更强调重构与下游策略表现。一个潜在研究切口是联合训练语义对齐损失与动力学/可行性损失，并在解码轨迹上验证约束满足和闭环控制效果。
-- **傅里叶与 B-spline 的差异：**傅里叶/DCT 对全局周期/频率结构和紧凑压缩有效；B-spline 具备局部支撑、控制点可解释性和连续性优势。对有接触、分阶段、局部突变或可编辑动作的任务，样条的局部性可能更合适；对高频但总体平滑的动作块，频域压缩可能更省 token。
+### X-Tokenizer: A Multimodal Action Tokenizer for Vision-Language-Action Pretraining
 
-> 注：上面只列出可在 arXiv 找到、且摘要/正文明确涉及样条、傅里叶/DCT 表示或由此驱动的轨迹/控制优化工作。标题和简介以论文页面摘要及正文为依据；“严格三年窗口外”的 2023 年 5–9 月论文已在条目中注明，引用时请按你的论文时间范围决定是否保留。
+**arXiv：** https://arxiv.org/abs/2606.14752
 
-## 补充检索（2024–2026）
+**简介核心工作：**提出面向 VLA 预训练的多模态动作 tokenizer，将 tokenization 视为语义推理与可执行控制之间的接口。Semantic Residual Quantization 的首层通过 masked action modeling 编码粗粒度动作意图，后续残差层保留精细运动信息；再用与预训练基础模型的对比对齐和下一帧视觉语言特征预测增强语义 grounding。作者报告在 2.4M 条轨迹（约 2B action frames）上预训练，并在多模态 grounding 和长时程任务上优于 FAST。
 
-以下是第二轮检索新增的论文，按其研究对象拆分到“连续样条策略”和“相关基函数/任务驱动规划”两类。
+## 二、离散动作 token 与连续动作 expert 的混合接口
 
-## 四、连续 B-spline 动作策略与自适应时间表示
+近期 VLA 开始把“离散 token”与“连续动作生成”拆成互补角色：token 可以为 VLM 提供动作结构化监督或压缩后的计划表示，而 flow/diffusion expert 仍在连续空间生成可执行轨迹。要区分两种设计：有的工作在推理时真正由连续 expert 出动作；有的仍由自回归 expert 生成离散 token，再经 tokenizer 解码。两者都在探索 token 化与连续控制的协同，但不是同一种融合。
 
-### 9. B-spline Policy: Accelerating Manipulation Policies via B-spline Action Representations
+### Ordered Action Tokens for Visuomotor Policy Learning (OAT)
+
+**arXiv：** https://arxiv.org/abs/2607.21670
+
+**简介核心工作：**提出 Ordered Action Tokenization（OAT），用 register transformer、Finite Scalar Quantization 和 prefix 训练，将动作块编码为有序 token：早期 token 提供粗粒度且可解码的整段动作，后续 token 逐步细化残差。论文验证两种使用方式：自回归策略直接生成 token 并解码；以及 token co-training——离散动作 token loss 训练 VLM，VLM 的视觉/语言/状态上下文再条件化 flow-matching action expert，由 expert 在推理时生成连续动作。后者是本组论文中最直接的“离散监督 + 连续动作专家”融合方案，也让 token 负责可预测的动作计划表征、连续 expert 负责高保真控制。
+
+### FASTer: Toward Powerful and Efficient Autoregressive Vision–Language–Action Models with Learnable Action Tokenizer and Block-wise Decoding
+
+**OpenReview：** https://openreview.net/forum?id=k6nTUFoqeT  ·  **arXiv：** https://arxiv.org/abs/2512.04952
+
+**简介核心工作：**提出 FASTerVQ，以动作 patchification、Transformer/RVQ 及频域与时域重建损失压缩连续动作块；FASTerVLA 再以轻量 action expert 和 block-wise autoregressive 解码生成离散 action tokens，最后由 VQ decoder 还原连续轨迹。它与 OAT 的 token co-training 不同：FASTer 的 expert 仍输出离散码，而不是 flow/diffusion 连续动作；其创新点是让可学习 tokenizer、动作专用 expert 和分块并行解码协同，改善压缩、推理延迟及跨 embodiment 泛化。
+
+### ReAT: Residual Action Tokenization for Autoregressive Robot Policies
+
+**arXiv：** https://arxiv.org/abs/2610.13093
+
+**简介核心工作：**提出 Residual Action Tokenization（ReAT），每个新 token 根据当前已解码动作与目标动作之间的残差构造，并通过 reconstruction-conditioned decoder 显式修正前缀重建。任意非空 token 前缀都能解码为完整动作块，因此可按 token budget 渐进式提高动作精度。ReAT 是离散 token 与连续重建之间更紧密的闭环协同，但其策略仍预测离散 token、解码器还原动作；不是独立的连续 flow/diffusion expert。它与 OAT 的 ordered prefix 互补：OAT强调前缀次序及粗到细信息分配，ReAT明确让后续码对当前重建误差负责。
+
+**融合脉络：**FASTer 优化“离散 action expert → tokenizer 解码”的效率；ReAT 让每个离散码对应可解释的连续轨迹修正；OAT 则进一步验证“离散 token 监督 VLM + 连续 flow expert 执行”的异构双头路线。研究语言—时间—动作对齐时，可把 token 用作语言可预测、具时间顺序的高层动作计划，同时让连续 expert 负责精细、平滑且满足控制约束的轨迹；核心问题包括 token loss 与 flow loss 的梯度/语义对齐、专家上下文是否包含离散动作前缀、以及两路输出在闭环执行中的互补性。
+
+## 三、视频 latent action：从无动作标注视频到可迁移控制
+
+这条路线从视频帧间变化中推断动作变量。关键进展不是单纯压缩视频，而是让 latent action 能解释状态转移，并进一步被策略预测、映射为机器人控制或用于规划。需注意：视频 latent 往往先编码“画面如何变化”，并不天然等价于特定机器人的可执行动作。
+
+### 概念奠基：从无标签视频学习可控的潜在动作
+
+#### Genie: Generative Interactive Environments
+
+**arXiv：** https://arxiv.org/abs/2402.15391
+
+**简介核心工作：**提出可交互生成环境 Genie，从无标注互联网视频学习可控的环境模型。系统由视频 tokenizer、自回归 dynamics model 和 latent action model 构成；模型从相邻帧变化中发现潜在动作，并允许用户用潜在动作控制生成环境。其突破在于证明无需动作标注也能从视频中学出有用的交互变量，是视频 latent action / generative world model 的代表性起点；但它主要在 2D 游戏环境验证，不等于直接学得机器人控制器。
+
+#### Learning to Act without Actions
+
+**arXiv：** https://arxiv.org/abs/2312.10812
+
+**简介核心工作：**提出 Latent Action Policies（LAPO），从视频观测中恢复潜在动作信息，并据此训练 latent-action policy、world model 和 inverse dynamics model，不依赖真实动作标签。论文展示 latent policy 可通过少量动作标注离线微调，或通过奖励在线适配。它把无动作标签视频学习从生成式交互环境推进到策略学习，是后续机器人视频 latent-action 工作的重要方法基础。
+
+### 视频预训练迁移到机器人：从 token 预测到物理 grounding
+
+#### Latent Action Pretraining from Videos (LAPA)
+
+**arXiv：** https://arxiv.org/abs/2410.11758
+
+**简介核心工作：**提出 LAPA，用 VQ-VAE 式量化器从相邻视频帧学习离散 latent actions，再预训练 VLA 根据当前观察和任务描述预测这些 tokens，最后用少量机器人动作数据将 latent action 映射到真实控制。重点是利用无动作标签的人类/网络视频扩大 VLA 预训练数据，建立“视频变化 token → 机器人动作”的迁移链路。
+
+#### Moto: Latent Motion Token as the Bridging Language for Learning Robot Manipulation from Videos
+
+**arXiv：** https://arxiv.org/abs/2412.04445
+
+**简介核心工作：**通过 VQ-VAE 式 Latent Motion Tokenizer 将相邻视频帧间运动编码成离散 motion tokens，再用 Moto-GPT 自回归预测 token 序列，从视频中学习运动先验。随后以 co-fine-tuning 将 latent motion token 预测与低层机器人动作预测连接起来，把 motion token 作为视频运动和机器人执行之间的桥接表示。
+
+#### villa-X: Enhancing Latent Action Modeling in Vision-Language-Action Models
+
+**arXiv：** https://arxiv.org/abs/2507.23682
+
+**简介核心工作：**提出 Visual-Language-Latent-Action（ViLLA）框架。latent action model 联合 inverse dynamics、视觉 forward dynamics 和 proprioceptive forward dynamics：从前后帧推断 latent action，并预测未来视觉变化与机器人状态/动作；VLA actor 再联合预测 latent actions 和低层机器人动作。proprioceptive dynamics 将视频 latent 与机器人状态及物理动作联系起来，强化从人类视频到机器人控制的 grounding。
+
+### 扩展方向：latent-action world model、适应性与系统评估
+
+#### AdaWorld: Learning Adaptable World Models with Latent Actions
+
+**arXiv：** https://arxiv.org/abs/2503.18938
+
+**简介核心工作：**从视频自监督抽取 latent actions，并训练以 latent action 为条件的自回归 world model，以减少对大规模显式动作标注的依赖。论文重点展示该表示如何帮助模型在新环境中通过少量交互适配新动作，并用于视觉规划；它把 latent action 从表征/预训练目标推进到 world model 的控制接口与适应机制。
+
+#### Latent Action Pretraining Through World Modeling (LAWM)
+
+**arXiv：** https://arxiv.org/abs/2509.18428
+
+**简介核心工作：**提出 LAWM，通过未来状态预测的 world-model 目标从无标签机器人或人类视频中学习 latent action，再迁移到 imitation learning。它强调让 latent action 对状态转移具有解释力，并检验跨任务、环境和 embodiment 的迁移。与 LAPA 的 token 预测式 VLA 预训练相比，LAWM 更突出动力学建模信号。
+
+#### Learning Latent Action World Models In The Wild
+
+**arXiv：** https://arxiv.org/abs/2601.05230
+
+**简介核心工作：**将 latent-action world model 扩展到多样化的 in-the-wild 视频，系统处理噪声、视角差异和缺少共同 embodiment 等问题。作者发现受约束的连续 latent action 比常见向量量化更能表达复杂视频动作；在缺少统一 embodiment 时，latent 主要描述相机坐标下的局部运动，但仍可学习控制到 latent 的映射并支持规划。这是离散 codebook 主线的重要连续表示对照。
+
+#### What Matters for Latent Actions in Robot Learning
+
+**arXiv：** https://arxiv.org/abs/2608.19613
+
+**简介核心工作：**在统一 autoencoding 框架下，对机器人操作 latent action model 的建模范式、学习目标、正则化和集成策略进行系统实证比较，并研究 latent 质量代理指标能否预测下游任务表现。它不是新 tokenizer，而是帮助理解不同 latent-action 设计何时有效的比较基准，适合作为实验设计与评价依据。
+
+**主线梳理：**Genie 展示从无标签视频发现可控 latent 的可能性；LAPO 把 latent action 接入策略和逆动力学学习；LAPA、Moto、villa-X 则分别推进 VLA 预训练、运动 token 桥接及机器人状态 grounding；AdaWorld、LAWM 和 in-the-wild work 把研究扩展到 action-conditioned world model、快速适应与更复杂视频分布。
+
+## 四、跨 embodiment 的共享离散动作空间
+
+该路线学习通用动作词表，并将 token 解码到不同机器人的控制接口，重点处理动作空间异构。
+
+
+### Universal Actions for Enhanced Embodied Foundation Models
+
+**arXiv：** https://arxiv.org/abs/2501.10105
+
+**简介核心工作：**提出 UniAct 的 universal action space，以离散向量量化 code 表示不同机器人共享的原子行为，并通过 embodiment-specific 解码将通用动作还原为各自控制接口。目标是缓解跨机器人数据中关节、末端执行器及控制频率不一致导致的动作空间异构，支持跨 embodiment 训练和迁移。它学习跨机器人示范的共享离散动作词表，而非从视频无监督发现动作。
+
+## 五、连续样条动作表示：与离散 tokenizer 相邻的路线
+
+这些工作直接预测连续样条参数，而非离散词表；保留在调研中作为结构化轨迹表示的对照。它们尤其关注连续时间查询、时间缩放和可变动作时域。
+
+
+### B-spline Policy: Accelerating Manipulation Policies via B-spline Action Representations
 
 **arXiv：** https://arxiv.org/abs/2607.09648
 
 **简介核心工作：**提出 B-spline Policy（BSP），策略直接预测样条的 knot 与控制点，以连续 B-spline 曲线取代固定长度、固定离散时间间隔的动作块。解码动作可按不同频率查询，并通过时间缩放支持高速执行；作者将表示接入现有策略学习管线，在仿真和真实操作任务中考察成功率与任务完成时间。与 BEAST 的离散 tokenizer 路线相比，BSP 更强调连续参数预测、时间缩放和策略执行效率，适合研究动作 token 是否需要显式携带时长与 knot 位置。
 
-### 10. Spline Policy: A Structured Representation for Robot Policies
+### Spline Policy: A Structured Representation for Robot Policies
 
 **arXiv：** https://arxiv.org/abs/2606.07386
 
 **简介核心工作：**提出 Spline Policy（SP），将常见固定分辨率动作块替换成样条参数，同时保持策略骨干不变。样条可连续解码、任意时间分辨率查询、在参数空间编辑或约束，并传递给下游控制器；作者还针对二次样条构造状态相关向量场，用于围绕生成运动的局部纠正，并分析从观测不确定性传播到样条和轨迹的不确定性。方法覆盖 diffusion、flow-matching、Transformer 与 VLA 骨干，并在仿真和真实机器人场景验证。这篇将表示层与经典控制机制连接起来，尤其值得参考其参数空间编辑和执行时纠偏设计。
 
-### 11. SplineWAM: Adaptive Action Horizons for World Action Models via B-Spline Representations
+### SplineWAM: Adaptive Action Horizons for World Action Models via B-Spline Representations
 
 **arXiv：** https://arxiv.org/abs/2609.39873
 
 **简介核心工作：**针对 World Action Model 每次都输出固定长度动作块的问题，用固定参数预算的三次 B-spline 表示动作，并拟合非均匀 knot 时间，使不同动作复杂度获得不同时间分辨率和执行时长。视频监督也对齐到拟合后的 knot 时间；异步执行时用 Jacobian-Pullback Real-Time Chunking 校正样条参数，使已提交的动作前缀在解码后保持连续。作者在 LIBERO-Plus、RoboCasa 及双臂实机任务上评估。它直接把动作复杂度、时间分辨率和模型调用节奏联系起来，与你关注的时间信息对齐尤其相关。
 
-## 五、相邻的基函数规划与任务驱动轨迹优化
+## 六、综述与分类框架
 
-### 12. Smooth trajectory generation and hybrid B-splines-Quaternions based tool path interpolation for a 3T1R parallel kinematic milling robot
 
-**arXiv：** https://arxiv.org/abs/2602.16758
+### A Survey on Vision-Language-Action Models: An Action Tokenization Perspective
 
-**简介核心工作：**面向并联加工机器人，将 B-spline 用于位置路径、四元数用于姿态插值，并以 Bezier 曲线拟合路径弧长与工具姿态之间的非线性关系，再用序列二次规划求解。时间参数化分两阶段优化最小 jerk 与时间最优分段曲线，并在任务空间、关节空间依次实施。工作重点是加工轨迹规划和插补，不是学习式动作 tokenization；可作为位置—姿态—时间分解及异构轨迹分量联合参数化的参考。
+**arXiv：** https://arxiv.org/abs/2507.01925
 
-### 13. Observability-Aware Active Calibration of Multi-Sensor Extrinsics for Ground Robots via Online Trajectory Optimization
+**简介核心工作：**从 action tokenization 角度综述 VLA，将动作 token 分为语言描述、代码、affordance、轨迹、目标状态、latent representation、原始动作和 reasoning 等类别，并讨论不同 token 类型的优势、数据需求与 grounding 路径。它不是新 tokenizer 方法，但适合定位轨迹 token 在整体 action-token 谱系中的位置。
 
-**arXiv：** https://arxiv.org/abs/2506.13420
+## 综合比较与值得关注的方向
 
-**简介核心工作：**将 B-spline 控制点用于地面机器人在线轨迹优化，以 Fisher 信息矩阵最小特征值衡量多传感器外参的可观测性，并主动规划/重规划轨迹来改善标定数据质量。传感器包括麦克风阵列、LiDAR 和轮速编码器；论文提供仿真与实机验证。此处轨迹参数化服务于“信息采集/可观测性”目标，而非最短路或动作重构，适合参考任务语义如何转化为轨迹优化代价。
-
-### 14. Efficient and Real-Time Motion Planning for Robotics Using Projection-Based Optimization
-
-**arXiv：** https://arxiv.org/abs/2506.14865
-
-**简介核心工作：**提出增广拉格朗日谱投影梯度方法（ALSPG），通过欧氏投影、Minkowski 和及基函数表达几何约束，求解机器人运动规划问题。作者强调使用几何投影与基函数提升实时求解效率，并在 Franka、P-Rob 机械臂和小车上展示实验。论文摘要将 basis functions 纳入规划优化，但并非专门针对 B-spline 或傅里叶动作 token；可作为“低维基函数 + 几何可行域投影”优化范式的相关工作。
-
-## 跨类别比较与研究启发
-
-- **与你的表示学习问题最贴近：**FAST（DCT 系数离散 token）、BEAST（样条编码动作 token）、BSP/SP（直接预测连续样条参数）、SplineWAM（非均匀 knot 与自适应动作时域）。这几类工作可按“频域离散 token / 样条离散 token / 连续样条参数”建立清晰对照。
-- **时间信息显式化程度：**FAST 通常作用于固定采样动作块；BEAST 用固定长度表示；BSP/SP 可重采样与时间缩放；SplineWAM 进一步预测非均匀 knot、可变执行时长和策略下一次调用时刻。若论文主张对齐时间，后两类尤其值得精读。
-- **优化控制侧补充：**BSPOP、PE-Planner、自动驾驶 B-spline、主动标定轨迹优化等把控制/安全/信息目标直接作用到有限维基函数参数上；它们能补足 VLA tokenizer 文献通常没有严格动力学可行性分析的问题。
-- **检索边界：**新增条目仍以 arXiv 论文为主。标题含“basis”但未明确指 B-spline/Fourier 的论文已标注为广义相关，不应与直接采用这些基函数的工作等同引用。
-
-## 全部论文的分类总览
-
-为便于写 related work，可以将上面 14 篇按研究问题归并如下（编号对应前文条目）：
-
-| 类别 | 论文编号 | 表示对象与主要目标 |
+| 路线 | 代表工作 | 表示特点 / 主要突破 |
 | --- | --- | --- |
-| 离散动作序列 tokenization | 1 FAST；2 BEAST | 将连续动作块变成频域或样条参数 token，服务于 VLA/序列模型训练与动作压缩。 |
-| 连续样条动作策略 | 9 BSP；10 Spline Policy；11 SplineWAM | 策略预测样条参数；重点是连续解码、可变采样率/时域、时间缩放或异步动作块执行。 |
-| B-spline 轨迹优化与控制 | 3 BSPOP；4 PE-Planner；5 自动驾驶 B-spline；6 赛车最小曲率 | 以控制点作为低维优化变量，将平滑、动力学、安全、曲率或实时控制约束作用于轨迹。 |
-| 傅里叶/谱域控制与轨迹目标 | 7 Time Optimal Ergodic Search；8 Multidimensional Fourier Approximation | 7 以傅里叶谱度量遍历覆盖质量并优化搜索时间；8 用傅里叶基逼近最优控制/轨迹曲面。二者都不是离散动作 tokenizer。 |
-| 相邻的任务专用基函数规划 | 12 加工机器人 B-spline/四元数插补；13 主动标定轨迹优化；14 投影式实时运动规划 | 基函数服务于姿态/时间插补、信息可观测性或几何可行域投影，作为控制优化背景文献更合适。 |
+| 频域/结构化压缩 | FAST、BEAST | 用 DCT 或样条参数代替逐时刻分箱，压缩动作序列并保留平滑结构。 |
+| 大规模 VQ 动作词表 | VQ-VLA | 通过扩展真实与合成轨迹数据提升 codebook 覆盖和跨任务复用。 |
+| 离散 token + 连续 expert | OAT；相邻路线：FASTer、ReAT | OAT 用离散 token loss 训练 VLM、flow expert 生成连续动作；FASTer 和 ReAT 仍由 token expert 生成离散码并解码，但将 tokenizer、action expert 与连续重建更紧密协同。 |
+| 面向策略训练的 tokenizer | ActionCodec、ProAct | 直接考虑 token 序列是否容易被策略学习、预测，及未见 token 的解码鲁棒性。 |
+| 物理/行为结构保持 | LipVQ-VAE、ActionPiece、BAAT | 分别强调时间平滑、动作关系排序、跨示范行为对应。 |
+| 状态/语义条件化解码 | SA-VLA、X-Tokenizer | 前者让离散码按机器人状态适配连续控制；后者将粗动作意图与残差细节分层并对齐视觉语言语义。 |
+| 视频 latent action | Genie、LAPO、LAPA、Moto、villa-X、AdaWorld、LAWM | 从视频发现可控 latent，并逐步连接策略学习、VLA 预训练、机器人状态 grounding 与 world-model 规划。 |
+| 通用跨 embodiment 动作 | UniAct | 学习可通过 embodiment-specific decoder 落地的共享原子动作 code。 |
+| 连续样条策略 | B-spline Policy、Spline Policy、SplineWAM | 不使用离散词表，显式保留连续时间、knot 和动作时域结构。 |
 
-### 综述叙事建议
+### 与“语言—时间—动作”对齐的研究启发
 
-可以先介绍经典最优控制如何用低维基函数替代逐时刻决策变量（类别 3），再转向学习式动作表示：频域/样条离散 token（类别 1）和连续样条策略（类别 2）。随后讨论时间变量的显式化程度，从固定时间网格到时间缩放、非均匀 knot 和自适应动作时域；最后指出语义对齐和动力学可行性仍常由不同模块处理，构成联合学习语言、时间结构与可执行动作表示的研究空间。傅里叶控制曲面与遍历度量（类别 4）可作为频域表示脉络，但需明确其优化目标和表示对象与 VLA tokenization 不同。
+- **从压缩接口转向语义接口：**X-Tokenizer 将动作意图与细节残差分层，并对齐预训练视觉语言特征；OAT 展示离散 token 还可作为 VLM 的动作监督，交由连续 flow expert 执行。可进一步研究 token 是否对应可命名的动作阶段或语言片段。
+- **把策略可学习性纳入 tokenizer 目标：**ActionCodec 与 ProAct 的重点是 tokenizer 产出的序列是否利于策略优化、预测，以及对分布外 token 是否稳健，不只看重构误差。
+- **显式建模时间变化：**BAAT 对齐跨演示中时间不同但行为对应的片段；样条策略和 SplineWAM 则显式表示 knot 或可变执行时域。可将动作边界、时长和非均匀时间采样作为 token 的一部分。
+- **区分视觉 latent 与控制 latent：**Genie/LAPA/Moto 等从视频学习的 latent 可能只描述图像变化；状态条件解码（SA-VLA）或本体动力学监督（villa-X）提供了建立控制语义的重要路径。
+- **可执行性评价：**建议同时报告 token 率、重构误差、语义/行为对应、时间平滑、分布外解码有效性、闭环成功率和跨 embodiment 迁移。
+
+> 筛选说明：本版移除了 B-spline 赛车/自动驾驶/无人机规划、傅里叶遍历搜索及加工路径等通用轨迹优化论文；它们可另列为控制背景文献，但与 action tokenizer 主线关联较弱。
